@@ -1,0 +1,12 @@
+{
+  "name": "Ari's Inventory Assistant",
+  "short_name": "Ari's Inventory",
+  "description": "A cute, colorful inventory tracker for jewelry sets, sales, and stats.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FFF9EC",
+  "theme_color": "#FFC93C",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

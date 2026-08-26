@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // The group a signed-in user currently belongs to.
+    function myGroupId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupId;
+    }
+
+    // Each signed-in user has exactly one profile doc, keyed by their own uid.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // A group is a shared inventory "household". Members share entries/sets/soldTx.
+    match /groups/{groupId} {
+      allow read: if signedIn() && myGroupId() == groupId;
+      allow create: if signedIn();
+      allow update: if signedIn() && myGroupId() == groupId;
+      allow delete: if false;
+    }
+
+    match /entries/{id} {
+      allow read, update, delete: if signedIn() && resource.data.groupId == myGroupId();
+      allow create: if signedIn() && request.resource.data.groupId == myGroupId()
+                     && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    match /sets/{id} {
+      allow read, update, delete: if signedIn() && resource.data.groupId == myGroupId();
+      allow create: if signedIn() && request.resource.data.groupId == myGroupId();
+    }
+
+    match /soldTx/{id} {
+      allow read, update, delete: if signedIn() && resource.data.groupId == myGroupId();
+      allow create: if signedIn() && request.resource.data.groupId == myGroupId()
+                     && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // Friend-linking invitations, addressed by email.
+    match /linkInvites/{id} {
+      allow read: if signedIn() &&
+        (resource.data.toEmail == request.auth.token.email || resource.data.fromUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid
+                     && request.resource.data.fromEmail == request.auth.token.email;
+      allow update: if signedIn() &&
+        (resource.data.toEmail == request.auth.token.email || resource.data.fromUid == request.auth.uid);
+      allow delete: if signedIn() &&
+        (resource.data.toEmail == request.auth.token.email || resource.data.fromUid == request.auth.uid);
+    }
+  }
+}
