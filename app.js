@@ -65,7 +65,7 @@ const LIVE_FIELD_DEFS = [
   { key: "count", label: "Count / unit" },
   { key: "category", label: "Category" },
   { key: "setType", label: "Set type", get: (r) => r.setType || "" },
-  { key: "hasPhoto", label: "Has photo", get: (r) => (r.photo ? "Yes" : "No") },
+  { key: "photo", label: "Photo" },
 ];
 const SOLD_FIELD_DEFS = [
   { key: "name", label: "Name" },
@@ -75,6 +75,7 @@ const SOLD_FIELD_DEFS = [
   { key: "setType", label: "Set type", get: (r) => r.setType || "" },
   { key: "revenue", label: "Revenue", get: (r) => Number((r.revenue || 0).toFixed(2)) },
   { key: "lastDate", label: "Last sold", get: (r) => r.lastDate || "" },
+  { key: "photo", label: "Photo" },
 ];
 
 /* -------------------------------------------------------------------------
@@ -843,11 +844,12 @@ async function handleQuantityConfirm() {
 function openExportModal(mode, items) {
   const fieldDefs = mode === "live" ? LIVE_FIELD_DEFS : SOLD_FIELD_DEFS;
   const fields = {}; fieldDefs.forEach((f) => (fields[f.key] = true));
+  const fieldOrder = fieldDefs.map((f) => f.key);
   const catOptions = Array.from(new Set(items.map((i) => i.category || "Uncategorized")));
   const setOptions = Array.from(new Set(items.map((i) => i.setType || "No set")));
   const cats = {}; catOptions.forEach((c) => (cats[c] = true));
   const setTypes = {}; setOptions.forEach((s) => (setTypes[s] = true));
-  state.ui.modal = { kind: "export", mode, items, fieldDefs, fields, catOptions, setOptions, cats, setTypes, filename: mode === "live" ? "live-inventory" : "sold-inventory" };
+  state.ui.modal = { kind: "export", mode, items, fieldDefs, fields, fieldOrder, catOptions, setOptions, cats, setTypes, filename: mode === "live" ? "live-inventory" : "sold-inventory", exporting: false };
   renderAll();
 }
 function renderExportModalHTML(m) {
@@ -855,12 +857,24 @@ function renderExportModalHTML(m) {
   <div class="modal-overlay">
     <div class="modal-box" style="max-width:520px;">
       <h3>⬇️ Export to Excel</h3>
-      <p class="desc">Choose exactly what goes into the spreadsheet.</p>
+      <p class="desc">Choose what to include, embed each item's photo, and set the column order with the arrows.</p>
 
-      <div class="modal-section-label">Columns to include <button data-action="toggle-all-export-fields">Toggle all</button></div>
-      <div class="checkbox-grid" style="margin-bottom:16px;">
-        ${m.fieldDefs.map((f) => `
-        <label class="checkbox-item"><input type="checkbox" data-action="toggle-export-field" data-key="${esc(f.key)}" ${m.fields[f.key] ? "checked" : ""} /> ${esc(f.label)}</label>`).join("")}
+      <div class="modal-section-label">Columns to include & order <button data-action="toggle-all-export-fields">Toggle all</button></div>
+      <div class="reorder-list" style="margin-bottom:16px;">
+        ${m.fieldOrder.map((key, idx) => {
+          const f = m.fieldDefs.find((fd) => fd.key === key);
+          if (!f) return "";
+          return `
+          <div class="checkbox-item" style="justify-content:space-between;">
+            <label style="display:flex; align-items:center; gap:8px; flex:1; cursor:pointer;">
+              <input type="checkbox" data-action="toggle-export-field" data-key="${esc(f.key)}" ${m.fields[f.key] ? "checked" : ""} /> ${esc(f.label)}
+            </label>
+            <div style="display:flex; gap:2px;">
+              <button type="button" class="icon-btn" data-action="move-export-field-up" data-key="${esc(f.key)}" ${idx === 0 ? "disabled" : ""}>▲</button>
+              <button type="button" class="icon-btn" data-action="move-export-field-down" data-key="${esc(f.key)}" ${idx === m.fieldOrder.length - 1 ? "disabled" : ""}>▼</button>
+            </div>
+          </div>`;
+        }).join("")}
       </div>
 
       ${m.catOptions.length > 0 ? `
@@ -878,26 +892,72 @@ function renderExportModalHTML(m) {
       </div>` : ""}
 
       <div class="modal-actions">
-        <button class="btn btn-ghost" data-action="modal-cancel">Cancel</button>
-        <button class="btn btn-primary" data-action="do-export">⬇️ Export</button>
+        <button class="btn btn-ghost" data-action="modal-cancel" ${m.exporting ? "disabled" : ""}>Cancel</button>
+        <button class="btn btn-primary" data-action="do-export" ${m.exporting ? "disabled" : ""}>${m.exporting ? "⏳ Exporting…" : "⬇️ Export"}</button>
       </div>
     </div>
   </div>`;
 }
-function doExport() {
+async function fetchImageAsDataUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function doExport() {
   const m = state.ui.modal;
-  if (!m || m.kind !== "export") return;
-  const XLSX = window.XLSX;
-  const activeFields = m.fieldDefs.filter((f) => m.fields[f.key]);
-  const rows = m.items
-    .filter((r) => m.cats[r.category || "Uncategorized"])
-    .filter((r) => m.setTypes[r.setType || "No set"])
-    .map((r) => { const out = {}; activeFields.forEach((f) => (out[f.label] = f.get ? f.get(r) : r[f.key])); return out; });
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Inventory");
-  XLSX.writeFile(wb, `${m.filename}.xlsx`);
-  closeModal();
+  if (!m || m.kind !== "export" || m.exporting) return;
+  m.exporting = true;
+  renderAll();
+  try {
+    const ExcelJS = window.ExcelJS;
+    const orderedFields = m.fieldOrder.map((k) => m.fieldDefs.find((f) => f.key === k)).filter((f) => f && m.fields[f.key]);
+    const rows = m.items
+      .filter((r) => m.cats[r.category || "Uncategorized"])
+      .filter((r) => m.setTypes[r.setType || "No set"]);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Inventory");
+    ws.columns = orderedFields.map((f) => ({ header: f.label, key: f.key, width: f.key === "photo" ? 12 : 20 }));
+
+    const photoColIndex = orderedFields.findIndex((f) => f.key === "photo");
+
+    for (const r of rows) {
+      const rowData = {};
+      orderedFields.forEach((f) => { rowData[f.key] = f.key === "photo" ? "" : (f.get ? f.get(r) : r[f.key]); });
+      const excelRow = ws.addRow(rowData);
+      if (photoColIndex !== -1 && r.photo) {
+        try {
+          const dataUrl = await fetchImageAsDataUrl(r.photo);
+          if (dataUrl) {
+            const imgId = wb.addImage({ base64: dataUrl, extension: "jpeg" });
+            ws.addImage(imgId, { tl: { col: photoColIndex, row: excelRow.number - 1 }, ext: { width: 56, height: 56 } });
+            excelRow.height = 44;
+          }
+        } catch (err) { console.error("Image embed failed for", r.name, err); }
+      }
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${m.filename}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    closeModal();
+    showToast("Exported! 📥");
+  } catch (e) {
+    console.error(e);
+    showToast("Export failed — try again.");
+    m.exporting = false;
+    renderAll();
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -1259,6 +1319,18 @@ function wireStaticListeners() {
 
       case "open-export": openExportModal(t.dataset.mode, t.dataset.mode === "live" ? getLiveItems() : getSoldItems()); break;
       case "toggle-export-field": { const m = state.ui.modal; m.fields[t.dataset.key] = !m.fields[t.dataset.key]; renderAll(); break; }
+      case "move-export-field-up": {
+        const m = state.ui.modal; const key = t.dataset.key;
+        const idx = m.fieldOrder.indexOf(key);
+        if (idx > 0) { [m.fieldOrder[idx - 1], m.fieldOrder[idx]] = [m.fieldOrder[idx], m.fieldOrder[idx - 1]]; renderAll(); }
+        break;
+      }
+      case "move-export-field-down": {
+        const m = state.ui.modal; const key = t.dataset.key;
+        const idx = m.fieldOrder.indexOf(key);
+        if (idx !== -1 && idx < m.fieldOrder.length - 1) { [m.fieldOrder[idx + 1], m.fieldOrder[idx]] = [m.fieldOrder[idx], m.fieldOrder[idx + 1]]; renderAll(); }
+        break;
+      }
       case "toggle-export-cat": { const m = state.ui.modal; m.cats[t.dataset.key] = !m.cats[t.dataset.key]; renderAll(); break; }
       case "toggle-export-settype": { const m = state.ui.modal; m.setTypes[t.dataset.key] = !m.setTypes[t.dataset.key]; renderAll(); break; }
       case "toggle-all-export-fields": { const m = state.ui.modal; const all = Object.values(m.fields).every(Boolean); Object.keys(m.fields).forEach((k) => (m.fields[k] = !all)); renderAll(); break; }
