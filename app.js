@@ -24,12 +24,12 @@ import {
    not by hiding this config.
    ------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyAKf91h-lBCyZOcpWTdmeePSJ7UFUUoerY",
-  authDomain: "financial-planner-786d1.firebaseapp.com",
-  projectId: "financial-planner-786d1",
-  storageBucket: "financial-planner-786d1.firebasestorage.app",
-  messagingSenderId: "591365805551",
-  appId: "1:591365805551:web:c5606a73c65cdc84da921a"
+  apiKey: "AIzaSyASAd2iDl7dkc-HWpyomSJ4MuC6A5Bx0jQ",
+  authDomain: "ari-s-inventory-assistant.firebaseapp.com",
+  projectId: "ari-s-inventory-assistant",
+  storageBucket: "ari-s-inventory-assistant.firebasestorage.app",
+  messagingSenderId: "143138023127",
+  appId: "1:143138023127:web:c76470c7ae4ad467a5f292"
 };
 
 const firebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
