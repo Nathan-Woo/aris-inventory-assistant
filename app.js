@@ -24,12 +24,12 @@ import {
    not by hiding this config.
    ------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyAKf91h-lBCyZOcpWTdmeePSJ7UFUUoerY",
+  authDomain: "financial-planner-786d1.firebaseapp.com",
+  projectId: "financial-planner-786d1",
+  storageBucket: "financial-planner-786d1.firebasestorage.app",
+  messagingSenderId: "591365805551",
+  appId: "1:591365805551:web:c5606a73c65cdc84da921a"
 };
 
 const firebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");

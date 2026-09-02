@@ -112,7 +112,7 @@ The easiest way to set it, with nothing to install locally:
      }
    ]
    EOF
-   gsutil cors set cors.json gs://YOUR_STORAGE_BUCKET
+   gsutil cors set cors.json gs://financial-planner-786d1.firebasestorage.app
    ```
    Replace `YOUR_STORAGE_BUCKET` with the `storageBucket` value from the
    `firebaseConfig` block in your `app.js` (e.g. `your-project-id.appspot.com`
