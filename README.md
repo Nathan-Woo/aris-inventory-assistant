@@ -71,11 +71,60 @@ firebase deploy --only firestore:rules,storage:rules
 ```
 
 If this is the very first deploy and it complains about storage targets,
-run `firebase init storage` (choose `storage.rules` as the rules file,
-confirm overwrite) and try the deploy command again — this reconfirms the
-Storage bucket is properly linked.
+run `firebase init storage`. **Do not let it overwrite `storage.rules`** —
+if it asks "File storage.rules already exists. Overwrite?", answer **No**.
+(Its default template denies all reads/writes, which will silently break
+photo uploads with a `storage/unauthorized` error even though the deploy
+itself "succeeds.") You just need this command to confirm the Storage
+bucket is linked, not to regenerate the rules file. Then try the deploy
+command again.
 
-## 5. Run it locally (optional but recommended)
+**To verify the right rules actually made it live:** Firebase console →
+**Storage** → **Rules** tab should show the same `match /photos/{uid}/...`
+rules that are in your local `storage.rules` file. If you ever see a
+`storage/unauthorized` error when uploading a photo, this is the first
+thing to check — compare your local `storage.rules` against what the
+console shows, fix whichever is wrong, and re-run
+`firebase deploy --only storage`.
+
+## 5. Enable photo embedding in Excel exports (one-time)
+
+Photos display fine everywhere in the app without this step — this is
+only needed so that the **Export to Excel** feature can embed each item's
+actual photo into the spreadsheet. Displaying an `<img>` doesn't need
+special permission, but reading the raw image bytes (which embedding
+requires) does — that needs your Storage bucket to allow cross-origin
+reads, called CORS. This is a Cloud Storage bucket setting, separate from
+`storage.rules`, and it's not something `firebase deploy` touches.
+
+The easiest way to set it, with nothing to install locally:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and make sure the project switcher (top left) has your Firebase project selected.
+2. Click the **Cloud Shell** icon (a terminal icon, top right) to open a browser-based terminal. Wait for it to finish provisioning.
+3. Paste this whole block and press enter — it creates the config file and applies it in one go:
+   ```bash
+   cat > cors.json << 'EOF'
+   [
+     {
+       "origin": ["*"],
+       "method": ["GET"],
+       "maxAgeSeconds": 3600
+     }
+   ]
+   EOF
+   gsutil cors set cors.json gs://YOUR_STORAGE_BUCKET
+   ```
+   Replace `YOUR_STORAGE_BUCKET` with the `storageBucket` value from the
+   `firebaseConfig` block in your `app.js` (e.g. `your-project-id.appspot.com`
+   or `your-project-id.firebasestorage.app`).
+4. Confirm it took: `gsutil cors get gs://YOUR_STORAGE_BUCKET` should print back the config you just set.
+
+That's it — try exporting again and photos should now appear embedded in
+the spreadsheet. (A copy of `cors.json` is also included in this project
+folder if you'd rather upload it via Cloud Shell's upload button instead
+of pasting.)
+
+## 6. Run it locally (optional but recommended)
 
 ```powershell
 npx serve .
@@ -84,7 +133,7 @@ npx serve .
 Open the printed `localhost` URL. Sign in with Google and try adding an
 item. (`localhost` is authorized for Google sign-in by default.)
 
-## 6. Push to GitHub
+## 7. Push to GitHub
 
 ```powershell
 git init
@@ -114,13 +163,13 @@ git push -u origin main --force
 solo project, but avoid it on anything you're sharing commits with someone
 else on.
 
-## 7. Turn on GitHub Pages
+## 8. Turn on GitHub Pages
 
 1. On GitHub: repo → **Settings** → **Pages**.
 2. **Source**: "Deploy from a branch" → **Branch**: `main`, folder `/ (root)` → **Save**.
 3. GitHub gives you a URL like `https://YOUR-USERNAME.github.io/aris-inventory-assistant/`. It can take a minute or two to go live.
 
-## 8. Authorize your live domain for Google sign-in
+## 9. Authorize your live domain for Google sign-in
 
 Back in Firebase console → **Authentication** → **Settings** → **Authorized domains** →
 **Add domain** → add `YOUR-USERNAME.github.io`.
@@ -138,6 +187,8 @@ When I hand you updated files, only replace the **code** files:
 - `firestore.rules` / `storage.rules` — but only if I've told you these
   changed, and re-run `firebase deploy --only firestore:rules,storage:rules`
   afterward
+- `cors.json` is just a reference copy — it only matters if you re-run the
+  `gsutil cors set` command from step 5 again
 
 **Never overwrite `.firebaserc`** — it holds the connection to *your*
 Firebase project, which you set up once in step 3. Overwriting it is what
@@ -174,4 +225,8 @@ keep your local version.
 
 Photos are uploaded to Firebase Storage under `photos/{your-uid}/...`
 (resized client-side first) and referenced by URL — never stored as huge
-base64 blobs in Firestore.
+base64 blobs in Firestore. When you export to Excel, each item's photo is
+fetched and embedded directly into its row (via the ExcelJS library
+loaded from a CDN in `index.html`), so exporting a large inventory with
+many photos may take a few extra seconds — a "⏳ Exporting…" state shows
+on the Export button while that's happening.

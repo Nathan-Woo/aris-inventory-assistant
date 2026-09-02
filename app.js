@@ -24,12 +24,12 @@ import {
    not by hiding this config.
    ------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyASAd2iDl7dkc-HWpyomSJ4MuC6A5Bx0jQ",
-  authDomain: "ari-s-inventory-assistant.firebaseapp.com",
-  projectId: "ari-s-inventory-assistant",
-  storageBucket: "ari-s-inventory-assistant.firebasestorage.app",
-  messagingSenderId: "143138023127",
-  appId: "1:143138023127:web:c76470c7ae4ad467a5f292"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
 const firebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
@@ -47,6 +47,7 @@ if (firebaseConfigured) {
    2. Constants
    ------------------------------------------------------------------------- */
 const DEFAULT_CATEGORIES = ["Earrings", "Necklace", "Bracelet", "Ring", "Brooch", "Anklet", "Other"];
+const COLLECTIONS = ["Athena", "Serena"];
 const CHART_COLORS = ["#FF7A59", "#5FA8D3", "#8BC34A", "#FF8FAB", "#B79CED", "#FFC93C", "#4FB0A5", "#E36588"];
 
 const TABS = [
@@ -61,21 +62,23 @@ const TABS = [
 
 const LIVE_FIELD_DEFS = [
   { key: "name", label: "Name" },
+  { key: "photo", label: "Photo" },
   { key: "quantity", label: "Quantity" },
   { key: "count", label: "Count / unit" },
   { key: "category", label: "Category" },
+  { key: "collection", label: "Collection", get: (r) => r.collection || "" },
   { key: "setType", label: "Set type", get: (r) => r.setType || "" },
-  { key: "photo", label: "Photo" },
 ];
 const SOLD_FIELD_DEFS = [
   { key: "name", label: "Name" },
+  { key: "photo", label: "Photo" },
   { key: "quantity", label: "Quantity sold" },
   { key: "count", label: "Count / unit" },
   { key: "category", label: "Category" },
+  { key: "collection", label: "Collection", get: (r) => r.collection || "" },
   { key: "setType", label: "Set type", get: (r) => r.setType || "" },
   { key: "revenue", label: "Revenue", get: (r) => Number((r.revenue || 0).toFixed(2)) },
   { key: "lastDate", label: "Last sold", get: (r) => r.lastDate || "" },
-  { key: "photo", label: "Photo" },
 ];
 
 /* -------------------------------------------------------------------------
@@ -94,9 +97,9 @@ const state = {
     activeTab: "input",
     toast: "",
     modal: null,
-    form: { name: "", photo: "", quantity: "1", count: "1", category: DEFAULT_CATEGORIES[0], setType: "", date: todayISO() },
+    form: { name: "", photo: "", quantity: "1", count: "1", category: DEFAULT_CATEGORIES[0], collection: COLLECTIONS[0], setType: "", date: todayISO() },
     uploading: false,
-    hist: { search: "", dateFrom: "", dateTo: "", category: "", setType: "", page: 0, selected: {} },
+    hist: { search: "", dateFrom: "", dateTo: "", category: "", collection: "", setType: "", page: 0, selected: {} },
     sort: { live: "name", sold: "name" },
     ledger: { sortKey: "name", sortDir: 1 },
     stats: { groupBy: "name" },
@@ -174,11 +177,11 @@ function aggregateEntries(entries) {
   const map = new Map();
   entries.forEach((e) => {
     const key = norm(e.name);
-    if (!map.has(key)) map.set(key, { name: e.name, quantity: 0, category: e.category, setType: e.setType, count: e.count, photo: e.photo, _latest: -1 });
+    if (!map.has(key)) map.set(key, { name: e.name, quantity: 0, category: e.category, collection: e.collection, setType: e.setType, count: e.count, photo: e.photo, _latest: -1 });
     const g = map.get(key);
     g.quantity += Number(e.quantity) || 0;
     if (e.createdAt >= g._latest) {
-      g._latest = e.createdAt; g.category = e.category; g.setType = e.setType; g.count = e.count;
+      g._latest = e.createdAt; g.category = e.category; g.collection = e.collection; g.setType = e.setType; g.count = e.count;
       if (e.photo) g.photo = e.photo;
     }
     if (!g.photo && e.photo) g.photo = e.photo;
@@ -189,7 +192,7 @@ function aggregateSold(soldTx) {
   const map = new Map();
   soldTx.forEach((t) => {
     const key = norm(t.name);
-    if (!map.has(key)) map.set(key, { name: t.name, quantity: 0, revenue: 0, category: t.category, setType: t.setType, count: t.count, photo: t.photo, lastDate: t.date || "" });
+    if (!map.has(key)) map.set(key, { name: t.name, quantity: 0, revenue: 0, category: t.category, collection: t.collection, setType: t.setType, count: t.count, photo: t.photo, lastDate: t.date || "" });
     const g = map.get(key);
     g.quantity += Number(t.quantity) || 0;
     g.revenue += (Number(t.quantity) || 0) * (Number(t.price) || 0);
@@ -233,10 +236,10 @@ async function addEntry() {
     name: f.name.trim(), photo: f.photo || "",
     quantity: Math.max(1, Number(f.quantity) || 1),
     count: Math.max(1, Number(f.count) || 1),
-    category: f.category || "", setType: f.setType || "",
+    category: f.category || "", collection: f.collection || "", setType: f.setType || "",
     date: f.date || todayISO(), createdAt: Date.now(),
   });
-  state.ui.form = { name: "", photo: "", quantity: "1", count: "1", category: f.category, setType: f.setType, date: f.date || todayISO() };
+  state.ui.form = { name: "", photo: "", quantity: "1", count: "1", category: f.category, collection: f.collection, setType: f.setType, date: f.date || todayISO() };
   showToast("Added to your inventory! ✨");
   renderAll();
 }
@@ -264,7 +267,7 @@ async function removeSet(id) { await deleteDoc(doc(db, "sets", id)); showToast("
 async function sellItem(item, qty, price, date) {
   await addDoc(collection(db, "soldTx"), {
     groupId: state.profile.groupId, createdBy: state.user.uid,
-    name: item.name, category: item.category || "", setType: item.setType || "",
+    name: item.name, category: item.category || "", collection: item.collection || "", setType: item.setType || "",
     count: item.count || 1, photo: item.photo || "",
     quantity: qty, price: price || 0, date: date || todayISO(), createdAt: Date.now(),
   });
@@ -583,6 +586,7 @@ function renderInputTabHTML() {
     .filter((e) => (h.dateFrom ? e.date >= h.dateFrom : true))
     .filter((e) => (h.dateTo ? e.date <= h.dateTo : true))
     .filter((e) => (h.category ? e.category === h.category : true))
+    .filter((e) => (h.collection ? e.collection === h.collection : true))
     .filter((e) => (h.setType ? e.setType === h.setType : true))
     .sort((a, b) => b.createdAt - a.createdAt);
   const pageCount = Math.max(1, Math.ceil(filtered.length / 10));
@@ -636,6 +640,13 @@ function renderInputTabHTML() {
         </div>
 
         <div class="field">
+          <span class="field-label">Collection</span>
+          <select class="input" id="bind-form.collection" data-bind="form.collection">
+            ${COLLECTIONS.map((c) => `<option value="${esc(c)}" ${f.collection === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+          </select>
+        </div>
+
+        <div class="field">
           <span class="field-label">Set type</span>
           <span class="field-hint">Optional — manage these in the Sets tab</span>
           <select class="input" id="bind-form.setType" data-bind="form.setType">
@@ -674,6 +685,10 @@ function renderInputTabHTML() {
         <option value="">All categories</option>
         ${distinctCats.map((c) => `<option value="${esc(c)}" ${h.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
       </select>
+      <select class="input" id="bind-hist.collection" data-bind="hist.collection">
+        <option value="">All collections</option>
+        ${COLLECTIONS.map((c) => `<option value="${esc(c)}" ${h.collection === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+      </select>
       <select class="input" id="bind-hist.setType" data-bind="hist.setType">
         <option value="">All set types</option>
         ${distinctSets.map((s) => `<option value="${esc(s)}" ${h.setType === s ? "selected" : ""}>${esc(s)}</option>`).join("")}
@@ -685,7 +700,7 @@ function renderInputTabHTML() {
       <table class="data-table">
         <thead><tr>
           <th><input type="checkbox" data-action="toggle-select-page" ${allPageSelected ? "checked" : ""} /></th>
-          <th>Photo</th><th>Name</th><th>Qty</th><th>Count</th><th>Category</th><th>Set</th><th>Date</th><th></th>
+          <th>Photo</th><th>Name</th><th>Qty</th><th>Count</th><th>Category</th><th>Collection</th><th>Set</th><th>Date</th><th></th>
         </tr></thead>
         <tbody>
           ${pageItems.map((e) => `
@@ -696,6 +711,7 @@ function renderInputTabHTML() {
             <td>${e.quantity}</td>
             <td>${e.count}</td>
             <td>${e.category ? `<span class="chip" style="background:var(--blue-soft);">${esc(e.category)}</span>` : "—"}</td>
+            <td>${e.collection ? `<span class="chip" style="background:var(--purple-soft);">${esc(e.collection)}</span>` : "—"}</td>
             <td>${e.setType ? `<span class="chip" style="background:var(--pink-soft);">${esc(e.setType)}</span>` : "—"}</td>
             <td style="color:var(--ink-soft);">${fmtDate(e.date)}</td>
             <td style="text-align:right;"><button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button></td>
@@ -710,7 +726,7 @@ function renderInputTabHTML() {
         ${e.photo ? `<img class="thumb" src="${esc(e.photo)}" />` : `<div class="thumb-placeholder">🌼</div>`}
         <div class="row-info">
           <div class="name">${esc(e.name)}</div>
-          <div class="meta">Qty ${e.quantity} · ${esc(e.category || "—")} ${e.setType ? "· " + esc(e.setType) : ""}</div>
+          <div class="meta">Qty ${e.quantity} · ${esc(e.category || "—")} ${e.collection ? "· " + esc(e.collection) : ""} ${e.setType ? "· " + esc(e.setType) : ""}</div>
           <div class="meta">${fmtDate(e.date)}</div>
         </div>
         <button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button>
@@ -741,6 +757,7 @@ function renderInventoryCardHTML(item, mode) {
       <div class="chips">
         <span class="chip" style="background:${badgeColor};">${badgeLabel}: ${item.quantity}</span>
         ${item.category ? `<span class="chip" style="background:var(--blue-soft);">${esc(item.category)}</span>` : ""}
+        ${item.collection ? `<span class="chip" style="background:var(--purple-soft);">${esc(item.collection)}</span>` : ""}
         ${item.setType ? `<span class="chip" style="background:var(--pink-soft);">${esc(item.setType)}</span>` : ""}
       </div>
       <div class="sub">${item.count > 1 ? `${item.count} pieces/unit` : "1 piece/unit"}${item.revenue !== undefined ? ` · ${fmtMoney(item.revenue)} revenue` : ""}</div>
@@ -755,6 +772,7 @@ function renderInventoryTabHTML(mode) {
     if (sortKey === "name") return a.name.localeCompare(b.name);
     if (sortKey === "quantity") return b.quantity - a.quantity;
     if (sortKey === "category") return (a.category || "").localeCompare(b.category || "");
+    if (sortKey === "collection") return (a.collection || "").localeCompare(b.collection || "");
     if (sortKey === "setType") return (a.setType || "").localeCompare(b.setType || "");
     return 0;
   });
@@ -767,6 +785,7 @@ function renderInventoryTabHTML(mode) {
           <option value="name" ${sortKey === "name" ? "selected" : ""}>Alphabetical</option>
           <option value="quantity" ${sortKey === "quantity" ? "selected" : ""}>Quantity</option>
           <option value="category" ${sortKey === "category" ? "selected" : ""}>Category</option>
+          <option value="collection" ${sortKey === "collection" ? "selected" : ""}>Collection</option>
           <option value="setType" ${sortKey === "setType" ? "selected" : ""}>Set type</option>
         </select>
         <button class="btn btn-secondary" data-action="open-export" data-mode="${mode}">⬇️ Export</button>
@@ -846,10 +865,12 @@ function openExportModal(mode, items) {
   const fields = {}; fieldDefs.forEach((f) => (fields[f.key] = true));
   const fieldOrder = fieldDefs.map((f) => f.key);
   const catOptions = Array.from(new Set(items.map((i) => i.category || "Uncategorized")));
+  const collectionOptions = Array.from(new Set(items.map((i) => i.collection || "Unassigned")));
   const setOptions = Array.from(new Set(items.map((i) => i.setType || "No set")));
   const cats = {}; catOptions.forEach((c) => (cats[c] = true));
+  const collections = {}; collectionOptions.forEach((c) => (collections[c] = true));
   const setTypes = {}; setOptions.forEach((s) => (setTypes[s] = true));
-  state.ui.modal = { kind: "export", mode, items, fieldDefs, fields, fieldOrder, catOptions, setOptions, cats, setTypes, filename: mode === "live" ? "live-inventory" : "sold-inventory", exporting: false };
+  state.ui.modal = { kind: "export", mode, items, fieldDefs, fields, fieldOrder, catOptions, collectionOptions, setOptions, cats, collections, setTypes, sortKey: "name", filename: mode === "live" ? "live-inventory" : "sold-inventory", exporting: false };
   renderAll();
 }
 function renderExportModalHTML(m) {
@@ -857,7 +878,18 @@ function renderExportModalHTML(m) {
   <div class="modal-overlay">
     <div class="modal-box" style="max-width:520px;">
       <h3>⬇️ Export to Excel</h3>
-      <p class="desc">Choose what to include, embed each item's photo, and set the column order with the arrows.</p>
+      <p class="desc">Choose what to include, embed each item's photo, set the column order, and pick how items are sorted.</p>
+
+      <div class="field" style="margin-bottom:16px;">
+        <span class="field-label">Order items by</span>
+        <select class="input" id="bind-modal.sortKey" data-bind="modal.sortKey">
+          <option value="name" ${m.sortKey === "name" ? "selected" : ""}>Alphabetical (name)</option>
+          <option value="category" ${m.sortKey === "category" ? "selected" : ""}>Category</option>
+          <option value="collection" ${m.sortKey === "collection" ? "selected" : ""}>Collection (Athena / Serena)</option>
+          <option value="setType" ${m.sortKey === "setType" ? "selected" : ""}>Set type</option>
+          <option value="quantity" ${m.sortKey === "quantity" ? "selected" : ""}>Quantity (high to low)</option>
+        </select>
+      </div>
 
       <div class="modal-section-label">Columns to include & order <button data-action="toggle-all-export-fields">Toggle all</button></div>
       <div class="reorder-list" style="margin-bottom:16px;">
@@ -882,6 +914,13 @@ function renderExportModalHTML(m) {
       <div class="checkbox-grid" style="margin-bottom:16px;">
         ${m.catOptions.map((c) => `
         <label class="checkbox-item" style="background:var(--blue-soft);"><input type="checkbox" data-action="toggle-export-cat" data-key="${esc(c)}" ${m.cats[c] ? "checked" : ""} /> ${esc(c)}</label>`).join("")}
+      </div>` : ""}
+
+      ${m.collectionOptions.length > 0 ? `
+      <div class="modal-section-label">Collections to include <button data-action="toggle-all-export-collections">Toggle all</button></div>
+      <div class="checkbox-grid" style="margin-bottom:16px;">
+        ${m.collectionOptions.map((c) => `
+        <label class="checkbox-item" style="background:var(--purple-soft);"><input type="checkbox" data-action="toggle-export-collection" data-key="${esc(c)}" ${m.collections[c] ? "checked" : ""} /> ${esc(c)}</label>`).join("")}
       </div>` : ""}
 
       ${m.setOptions.length > 0 ? `
@@ -917,29 +956,42 @@ async function doExport() {
   try {
     const ExcelJS = window.ExcelJS;
     const orderedFields = m.fieldOrder.map((k) => m.fieldDefs.find((f) => f.key === k)).filter((f) => f && m.fields[f.key]);
-    const rows = m.items
+    let rows = m.items
       .filter((r) => m.cats[r.category || "Uncategorized"])
+      .filter((r) => m.collections[r.collection || "Unassigned"])
       .filter((r) => m.setTypes[r.setType || "No set"]);
+
+    const sortKey = m.sortKey || "name";
+    rows = rows.sort((a, b) => {
+      if (sortKey === "quantity") return b.quantity - a.quantity;
+      const av = String(a[sortKey] || ""), bv = String(b[sortKey] || "");
+      return av.localeCompare(bv) || a.name.localeCompare(b.name);
+    });
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Inventory");
     ws.columns = orderedFields.map((f) => ({ header: f.label, key: f.key, width: f.key === "photo" ? 12 : 20 }));
 
     const photoColIndex = orderedFields.findIndex((f) => f.key === "photo");
+    let photoFailures = 0;
+    let photoAttempts = 0;
 
     for (const r of rows) {
       const rowData = {};
       orderedFields.forEach((f) => { rowData[f.key] = f.key === "photo" ? "" : (f.get ? f.get(r) : r[f.key]); });
       const excelRow = ws.addRow(rowData);
       if (photoColIndex !== -1 && r.photo) {
+        photoAttempts++;
         try {
           const dataUrl = await fetchImageAsDataUrl(r.photo);
           if (dataUrl) {
             const imgId = wb.addImage({ base64: dataUrl, extension: "jpeg" });
             ws.addImage(imgId, { tl: { col: photoColIndex, row: excelRow.number - 1 }, ext: { width: 56, height: 56 } });
             excelRow.height = 44;
+          } else {
+            photoFailures++;
           }
-        } catch (err) { console.error("Image embed failed for", r.name, err); }
+        } catch (err) { console.error("Image embed failed for", r.name, err); photoFailures++; }
       }
     }
 
@@ -951,7 +1003,13 @@ async function doExport() {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     closeModal();
-    showToast("Exported! 📥");
+    if (photoAttempts > 0 && photoFailures === photoAttempts) {
+      showToast("Exported, but photos couldn't be embedded — check the README's CORS setup step.");
+    } else if (photoFailures > 0) {
+      showToast(`Exported — ${photoFailures} of ${photoAttempts} photos couldn't be embedded.`);
+    } else {
+      showToast("Exported! 📥");
+    }
   } catch (e) {
     console.error(e);
     showToast("Export failed — try again.");
@@ -973,6 +1031,7 @@ function renderLedgerTabHTML() {
     const totalSold = s ? s.quantity : 0;
     return {
       name: (l && l.name) || (s && s.name), category: (l && l.category) || (s && s.category) || "—",
+      collection: (l && l.collection) || (s && s.collection) || "",
       setType: (l && l.setType) || (s && s.setType) || "", totalEntered, totalSold, current: totalEntered - totalSold,
       percentSold: totalEntered > 0 ? (totalSold / totalEntered) * 100 : 0, revenue: s ? s.revenue : 0,
     };
@@ -984,7 +1043,7 @@ function renderLedgerTabHTML() {
   });
   const totals = rows.reduce((acc, r) => ({ entered: acc.entered + r.totalEntered, sold: acc.sold + r.totalSold, revenue: acc.revenue + r.revenue }), { entered: 0, sold: 0, revenue: 0 });
   const cols = [
-    { key: "name", label: "Name" }, { key: "category", label: "Category" }, { key: "setType", label: "Set" },
+    { key: "name", label: "Name" }, { key: "category", label: "Category" }, { key: "collection", label: "Collection" }, { key: "setType", label: "Set" },
     { key: "totalEntered", label: "Lifetime total" }, { key: "totalSold", label: "Total sold" }, { key: "current", label: "In stock" },
     { key: "percentSold", label: "% sold" }, { key: "revenue", label: "Revenue" },
   ];
@@ -1009,6 +1068,7 @@ function renderLedgerTabHTML() {
           <tr>
             <td style="font-weight:700;">${esc(r.name)}</td>
             <td><span class="chip" style="background:var(--blue-soft);">${esc(r.category)}</span></td>
+            <td>${r.collection ? `<span class="chip" style="background:var(--purple-soft);">${esc(r.collection)}</span>` : "—"}</td>
             <td>${r.setType ? `<span class="chip" style="background:var(--pink-soft);">${esc(r.setType)}</span>` : "—"}</td>
             <td>${r.totalEntered}</td><td>${r.totalSold}</td>
             <td style="font-weight:700; color:var(--green);">${r.current}</td>
@@ -1023,6 +1083,7 @@ function renderLedgerTabHTML() {
         <div class="name">${esc(r.name)}</div>
         <div class="chips">
           <span class="chip" style="background:var(--blue-soft);">${esc(r.category)}</span>
+          ${r.collection ? `<span class="chip" style="background:var(--purple-soft);">${esc(r.collection)}</span>` : ""}
           ${r.setType ? `<span class="chip" style="background:var(--pink-soft);">${esc(r.setType)}</span>` : ""}
         </div>
         <div class="meta">Lifetime ${r.totalEntered} · Sold ${r.totalSold} · In stock <b style="color:var(--green);">${r.current}</b></div>
@@ -1044,6 +1105,7 @@ function renderStatsTabHTML() {
       <div class="stats-toggle-group">
         <button class="stats-toggle-btn ${groupBy === "name" ? "active" : ""}" data-action="set-stats-groupby" data-key="name">Item</button>
         <button class="stats-toggle-btn ${groupBy === "category" ? "active" : ""}" data-action="set-stats-groupby" data-key="category">Category</button>
+        <button class="stats-toggle-btn ${groupBy === "collection" ? "active" : ""}" data-action="set-stats-groupby" data-key="collection">Collection</button>
         <button class="stats-toggle-btn ${groupBy === "setType" ? "active" : ""}" data-action="set-stats-groupby" data-key="setType">Set type</button>
       </div>
     </div>
@@ -1073,7 +1135,7 @@ function mountStatsCharts() {
   // Pie 1: units sold grouped by item / category / set type
   const map1 = new Map();
   state.soldTx.forEach((t) => {
-    const key = groupBy === "name" ? t.name : groupBy === "category" ? (t.category || "Uncategorized") : (t.setType || "No set");
+    const key = groupBy === "name" ? t.name : groupBy === "category" ? (t.category || "Uncategorized") : groupBy === "collection" ? (t.collection || "Unassigned") : (t.setType || "No set");
     map1.set(key, (map1.get(key) || 0) + (Number(t.quantity) || 0));
   });
   const pie1 = Array.from(map1.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -1235,6 +1297,7 @@ function wireStaticListeners() {
       const match = distinctEntryOptions().find((o) => norm(o.name) === norm(t.value));
       if (match) {
         state.ui.form.category = match.category || state.ui.form.category;
+        state.ui.form.collection = match.collection || state.ui.form.collection;
         state.ui.form.setType = match.setType || "";
         state.ui.form.count = match.count || 1;
       }
@@ -1332,9 +1395,11 @@ function wireStaticListeners() {
         break;
       }
       case "toggle-export-cat": { const m = state.ui.modal; m.cats[t.dataset.key] = !m.cats[t.dataset.key]; renderAll(); break; }
+      case "toggle-export-collection": { const m = state.ui.modal; m.collections[t.dataset.key] = !m.collections[t.dataset.key]; renderAll(); break; }
       case "toggle-export-settype": { const m = state.ui.modal; m.setTypes[t.dataset.key] = !m.setTypes[t.dataset.key]; renderAll(); break; }
       case "toggle-all-export-fields": { const m = state.ui.modal; const all = Object.values(m.fields).every(Boolean); Object.keys(m.fields).forEach((k) => (m.fields[k] = !all)); renderAll(); break; }
       case "toggle-all-export-cats": { const m = state.ui.modal; const all = Object.values(m.cats).every(Boolean); Object.keys(m.cats).forEach((k) => (m.cats[k] = !all)); renderAll(); break; }
+      case "toggle-all-export-collections": { const m = state.ui.modal; const all = Object.values(m.collections).every(Boolean); Object.keys(m.collections).forEach((k) => (m.collections[k] = !all)); renderAll(); break; }
       case "toggle-all-export-settypes": { const m = state.ui.modal; const all = Object.values(m.setTypes).every(Boolean); Object.keys(m.setTypes).forEach((k) => (m.setTypes[k] = !all)); renderAll(); break; }
       case "do-export": doExport(); break;
 
