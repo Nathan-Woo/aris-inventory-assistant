@@ -112,12 +112,12 @@ The easiest way to set it, with nothing to install locally:
      }
    ]
    EOF
-   gsutil cors set cors.json gs://financial-planner-786d1.firebasestorage.app
+   gsutil cors set cors.json gs://ari-s-inventory-assistant.firebasestorage.app
    ```
    Replace `YOUR_STORAGE_BUCKET` with the `storageBucket` value from the
    `firebaseConfig` block in your `app.js` (e.g. `your-project-id.appspot.com`
    or `your-project-id.firebasestorage.app`).
-4. Confirm it took: `gsutil cors get gs://YOUR_STORAGE_BUCKET` should print back the config you just set.
+4. Confirm it took: `gsutil cors get gs://ari-s-inventory-assistant.firebasestorage.app` should print back the config you just set.
 
 That's it — try exporting again and photos should now appear embedded in
 the spreadsheet. (A copy of `cors.json` is also included in this project

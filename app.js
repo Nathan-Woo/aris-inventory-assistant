@@ -24,12 +24,12 @@ import {
    not by hiding this config.
    ------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyASAd2iDl7dkc-HWpyomSJ4MuC6A5Bx0jQ",
-  authDomain: "ari-s-inventory-assistant.firebaseapp.com",
-  projectId: "ari-s-inventory-assistant",
-  storageBucket: "ari-s-inventory-assistant.firebasestorage.app",
-  messagingSenderId: "143138023127",
-  appId: "1:143138023127:web:c76470c7ae4ad467a5f292"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
 const firebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
@@ -290,7 +290,7 @@ async function addBackToLive(item, qty) {
   await batch.commit();
 }
 
-async function handlePhotoChange(fileInputEl) {
+async function handlePhotoChange(fileInputEl, targetPath) {
   const file = fileInputEl.files && fileInputEl.files[0];
   if (!file) return;
   state.ui.uploading = true; renderAll();
@@ -300,7 +300,7 @@ async function handlePhotoChange(fileInputEl) {
     const sref = storageRef(storage, path);
     await uploadBytes(sref, blob, { contentType: "image/jpeg" });
     const url = await getDownloadURL(sref);
-    state.ui.form.photo = url;
+    setDeep(state.ui, targetPath || "form.photo", url);
   } catch (e) {
     console.error(e);
     showToast(`Couldn't upload that photo${e && e.code ? ` (${e.code})` : ""} — try again.`);
@@ -537,6 +537,8 @@ function renderModalHTML() {
   if (m.kind === "confirm") return renderConfirmModalHTML(m);
   if (m.kind === "quantity") return renderQuantityModalHTML(m);
   if (m.kind === "export") return renderExportModalHTML(m);
+  if (m.kind === "editEntry") return renderEditEntryModalHTML(m);
+  if (m.kind === "createSet") return renderCreateSetModalHTML(m);
   return "";
 }
 function renderAll() {
@@ -617,7 +619,7 @@ function renderInputTabHTML() {
           <div style="display:flex; align-items:center; gap:8px;">
             ${state.ui.uploading
               ? `<span style="font-size:12px; color:var(--ink-soft); font-weight:700;">Uploading photo…</span>`
-              : `<input type="file" accept="image/*" data-action="photo-upload" style="font-size:12px;" />`}
+              : `<input type="file" accept="image/*" data-action="photo-upload" data-target="form.photo" style="font-size:12px;" />`}
             ${f.photo ? `<img src="${esc(f.photo)}" alt="" style="width:40px;height:40px;border-radius:12px;object-fit:cover;border:2px solid var(--line);" />` : ""}
           </div>
         </div>
@@ -672,7 +674,11 @@ function renderInputTabHTML() {
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <h2 class="section-title" style="margin:0;">📋 Entry history</h2>
-      ${selectedCount > 0 ? `<button class="btn btn-danger" data-action="request-delete-many">🗑️ Delete selected (${selectedCount})</button>` : ""}
+      ${selectedCount > 0 ? `
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-soft" data-action="open-create-set-modal">🌸 Create set (${selectedCount})</button>
+        <button class="btn btn-danger" data-action="request-delete-many">🗑️ Delete selected (${selectedCount})</button>
+      </div>` : ""}
     </div>
 
     <div class="filters-grid">
@@ -714,7 +720,10 @@ function renderInputTabHTML() {
             <td>${e.collection ? `<span class="chip" style="background:var(--purple-soft);">${esc(e.collection)}</span>` : "—"}</td>
             <td>${e.setType ? `<span class="chip" style="background:var(--pink-soft);">${esc(e.setType)}</span>` : "—"}</td>
             <td style="color:var(--ink-soft);">${fmtDate(e.date)}</td>
-            <td style="text-align:right;"><button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button></td>
+            <td style="text-align:right; white-space:nowrap;">
+              <button class="icon-btn" data-action="edit-entry" data-id="${e.id}">✏️</button>
+              <button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button>
+            </td>
           </tr>`).join("")}
         </tbody>
       </table>
@@ -729,7 +738,10 @@ function renderInputTabHTML() {
           <div class="meta">Qty ${e.quantity} · ${esc(e.category || "—")} ${e.collection ? "· " + esc(e.collection) : ""} ${e.setType ? "· " + esc(e.setType) : ""}</div>
           <div class="meta">${fmtDate(e.date)}</div>
         </div>
-        <button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <button class="icon-btn" data-action="edit-entry" data-id="${e.id}">✏️</button>
+          <button class="icon-btn" data-action="request-delete-entry" data-id="${e.id}" data-name="${esc(e.name)}">🗑️</button>
+        </div>
       </div>`).join("")}
     </div>
     <div class="pagination">
@@ -854,6 +866,148 @@ async function handleQuantityConfirm() {
   } else {
     await addBackToLive(m.item, qty);
     showToast(`Returned ${qty} × ${m.item.name} to live inventory.`);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Edit entry modal
+   ------------------------------------------------------------------------- */
+function openEditEntryModal(entry) {
+  state.ui.modal = {
+    kind: "editEntry", entryId: entry.id,
+    name: entry.name, photo: entry.photo || "", quantity: String(entry.quantity),
+    count: String(entry.count), category: entry.category || "", collection: entry.collection || COLLECTIONS[0],
+    setType: entry.setType || "", date: entry.date || todayISO(),
+  };
+  renderAll();
+}
+function renderEditEntryModalHTML(m) {
+  return `
+  <div class="modal-overlay">
+    <div class="modal-box" style="max-width:480px;">
+      <h3>✏️ Edit entry</h3>
+      <div class="form-grid" style="margin-top:10px;">
+        <div class="field">
+          <span class="field-label">Item name</span>
+          <input class="input" id="bind-modal.name" data-bind="modal.name" value="${esc(m.name)}" />
+        </div>
+        <div class="field">
+          <span class="field-label">Photo</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${state.ui.uploading
+              ? `<span style="font-size:12px; color:var(--ink-soft); font-weight:700;">Uploading photo…</span>`
+              : `<input type="file" accept="image/*" data-action="photo-upload" data-target="modal.photo" style="font-size:12px;" />`}
+            ${m.photo ? `<img src="${esc(m.photo)}" style="width:40px;height:40px;border-radius:12px;object-fit:cover;border:2px solid var(--line);" />` : ""}
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label">Quantity</span>
+          <input class="input" id="bind-modal.quantity" type="number" min="1" data-bind="modal.quantity" value="${esc(m.quantity)}" />
+        </div>
+        <div class="field">
+          <span class="field-label">Count</span>
+          <input class="input" id="bind-modal.count" type="number" min="1" data-bind="modal.count" value="${esc(m.count)}" />
+        </div>
+        <div class="field">
+          <span class="field-label">Category</span>
+          <input class="input" id="bind-modal.category" list="editCategorySuggestions" data-bind="modal.category" value="${esc(m.category)}" />
+          <datalist id="editCategorySuggestions">${allCategories().map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist>
+        </div>
+        <div class="field">
+          <span class="field-label">Collection</span>
+          <select class="input" id="bind-modal.collection" data-bind="modal.collection">
+            ${COLLECTIONS.map((c) => `<option value="${esc(c)}" ${m.collection === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <span class="field-label">Set type</span>
+          <select class="input" id="bind-modal.setType" data-bind="modal.setType">
+            <option value="">— None —</option>
+            ${state.sets.map((s) => `<option value="${esc(s.name)}" ${m.setType === s.name ? "selected" : ""}>${esc(s.name)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <span class="field-label">Date entered</span>
+          <input class="input" id="bind-modal.date" type="date" data-bind="modal.date" value="${esc(m.date)}" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-cancel" ${state.ui.uploading ? "disabled" : ""}>Cancel</button>
+        <button class="btn btn-primary" data-action="confirm-edit-entry" ${state.ui.uploading ? "disabled" : ""}>💾 Save changes</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function handleEditEntryConfirm() {
+  const m = state.ui.modal;
+  if (!m || m.kind !== "editEntry") return;
+  if (!m.name || !m.name.trim()) { showToast("Give it a name first! 🌼"); return; }
+  const id = m.entryId;
+  state.ui.modal = null;
+  renderAll();
+  try {
+    await updateDoc(doc(db, "entries", id), {
+      name: m.name.trim(), photo: m.photo || "",
+      quantity: Math.max(1, Number(m.quantity) || 1),
+      count: Math.max(1, Number(m.count) || 1),
+      category: m.category || "", collection: m.collection || "", setType: m.setType || "",
+      date: m.date || todayISO(),
+    });
+    showToast("Entry updated! ✨");
+  } catch (e) {
+    console.error(e);
+    showToast("Couldn't save changes — try again.");
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Create a set from selected entries
+   ------------------------------------------------------------------------- */
+function openCreateSetModal(ids) {
+  state.ui.modal = { kind: "createSet", ids, name: "" };
+  renderAll();
+}
+function renderCreateSetModalHTML(m) {
+  return `
+  <div class="modal-overlay">
+    <div class="modal-box">
+      <h3>🌸 Create a set from ${m.ids.length} selected item${m.ids.length === 1 ? "" : "s"}</h3>
+      <p class="desc">Give this set a name — new or existing. Every selected entry will be tagged with it, so they'll show up together as a matching set.</p>
+      <div class="field">
+        <span class="field-label">Set name</span>
+        <input class="input" id="bind-modal.name" list="existingSetNames" data-bind="modal.name" value="${esc(m.name)}" placeholder="e.g. Spring Garden Set" />
+        <datalist id="existingSetNames">${state.sets.map((s) => `<option value="${esc(s.name)}"></option>`).join("")}</datalist>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-cancel">Cancel</button>
+        <button class="btn btn-primary" data-action="confirm-create-set">🌸 Create set</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function handleCreateSetConfirm() {
+  const m = state.ui.modal;
+  if (!m || m.kind !== "createSet") return;
+  const name = (m.name || "").trim();
+  if (!name) { showToast("Give the set a name first! 🌸"); return; }
+  const ids = m.ids;
+  state.ui.modal = null;
+  renderAll();
+  try {
+    const existing = state.sets.find((s) => norm(s.name) === norm(name));
+    const finalName = existing ? existing.name : name;
+    if (!existing) {
+      await addDoc(collection(db, "sets"), { groupId: state.profile.groupId, name: finalName, createdAt: Date.now() });
+    }
+    const batch = writeBatch(db);
+    ids.forEach((id) => batch.update(doc(db, "entries", id), { setType: finalName }));
+    await batch.commit();
+    state.ui.hist.selected = {};
+    showToast(`Grouped ${ids.length} item${ids.length === 1 ? "" : "s"} into "${finalName}"! 🌸`);
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast("Couldn't create the set — try again.");
   }
 }
 
@@ -1310,7 +1464,7 @@ function wireStaticListeners() {
   document.addEventListener("change", async (e) => {
     const t = e.target;
     if (!t.dataset) return;
-    if (t.dataset.action === "photo-upload") { await handlePhotoChange(t); }
+    if (t.dataset.action === "photo-upload") { await handlePhotoChange(t, t.dataset.target || "form.photo"); }
   });
 
   document.addEventListener("click", async (e) => {
@@ -1349,6 +1503,7 @@ function wireStaticListeners() {
           .filter((e) => (h2.dateFrom ? e.date >= h2.dateFrom : true))
           .filter((e) => (h2.dateTo ? e.date <= h2.dateTo : true))
           .filter((e) => (h2.category ? e.category === h2.category : true))
+          .filter((e) => (h2.collection ? e.collection === h2.collection : true))
           .filter((e) => (h2.setType ? e.setType === h2.setType : true))
           .sort((a, b) => b.createdAt - a.createdAt);
         const pageIds = filtered.slice(h2.page * 10, h2.page * 10 + 10).map((e) => e.id);
@@ -1357,6 +1512,19 @@ function wireStaticListeners() {
         renderAll();
         break;
       }
+      case "edit-entry": {
+        const entry = state.entries.find((en) => en.id === t.dataset.id);
+        if (entry) openEditEntryModal(entry);
+        break;
+      }
+      case "confirm-edit-entry": await handleEditEntryConfirm(); break;
+      case "open-create-set-modal": {
+        const ids = Object.keys(h.selected).filter((id) => h.selected[id]);
+        if (ids.length < 1) return;
+        openCreateSetModal(ids);
+        break;
+      }
+      case "confirm-create-set": await handleCreateSetConfirm(); break;
       case "request-delete-entry":
         openConfirmModal({
           title: "Remove this entry?", body: `This will permanently delete "${t.dataset.name}".`,
