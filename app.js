@@ -24,12 +24,12 @@ import {
    not by hiding this config.
    ------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyASAd2iDl7dkc-HWpyomSJ4MuC6A5Bx0jQ",
+  authDomain: "ari-s-inventory-assistant.firebaseapp.com",
+  projectId: "ari-s-inventory-assistant",
+  storageBucket: "ari-s-inventory-assistant.firebasestorage.app",
+  messagingSenderId: "143138023127",
+  appId: "1:143138023127:web:c76470c7ae4ad467a5f292"
 };
 
 const firebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");

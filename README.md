@@ -140,7 +140,7 @@ git init
 git add .
 git commit -m "Ari's Inventory Assistant"
 git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/aris-inventory-assistant.git
+git remote add origin https://github.com/Nathan-Woo/aris-inventory-assistant.git
 git push -u origin main
 ```
 
